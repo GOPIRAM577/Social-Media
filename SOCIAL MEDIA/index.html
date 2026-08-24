@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Scanner — Social Media Content Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+<style>
+  :root{
+    --ink:#14171f;
+    --ink-2:#1c2029;
+    --paper:#f6f2e9;
+    --paper-line:#e2dac4;
+    --coral:#ff5a36;
+    --coral-dim: #ff5a3622;
+    --mint:#33b27a;
+    --amber:#e8a33d;
+    --danger:#e8503a;
+    --slate:#9aa1ae;
+    --slate-2:#6b7280;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--ink);
+    color:#eceef2;
+    font-family:var(--font-body);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:40px 28px 80px;
+  }
+
+  header.top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:24px;
+    flex-wrap:wrap;
+    margin-bottom:44px;
+    border-bottom:1px solid #2a2f3a;
+    padding-bottom:28px;
+  }
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--coral);
+    margin:0 0 10px;
+  }
+  h1{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:clamp(28px,4vw,42px);
+    line-height:1.08;
+    margin:0;
+    max-width:640px;
+    letter-spacing:-.01em;
+  }
+  .steps{
+    display:flex;
+    gap:22px;
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--slate);
+  }
+  .steps span b{color:#eceef2;font-weight:500;}
+  .steps .active b{color:var(--coral);}
+
+  main.grid{
+    display:grid;
+    grid-template-columns:1.1fr .9fr;
+    gap:28px;
+  }
+  @media (max-width:860px){
+    main.grid{grid-template-columns:1fr;}
+  }
+
+  .panel{
+    background:var(--ink-2);
+    border:1px solid #2a2f3a;
+    border-radius:4px;
+    padding:26px;
+  }
+  .panel h2{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--slate);
+    margin:0 0 18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+
+  /* dropzone */
+  .dropzone{
+    border:1.5px dashed #3a4150;
+    border-radius:3px;
+    padding:38px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    position:relative;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--coral);
+    background:var(--coral-dim);
+  }
+  .dropzone .glyph{
+    font-family:var(--font-display);
+    font-size:34px;
+    color:var(--coral);
+    margin-bottom:10px;
+  }
+  .dropzone p{margin:4px 0;color:#c7cbd4;font-size:14px;}
+  .dropzone .hint{color:var(--slate);font-size:12px;}
+  .dropzone input{display:none;}
+
+  .filelist{margin-top:16px;display:flex;flex-direction:column;gap:8px;}
+  .filerow{
+    display:flex;align-items:center;gap:10px;
+    font-family:var(--font-mono);font-size:12px;
+    background:#181c25;border:1px solid #2a2f3a;border-radius:3px;
+    padding:9px 12px;color:#c7cbd4;
+  }
+  .filerow .dot{width:7px;height:7px;border-radius:50%;background:var(--slate);flex-shrink:0;}
+  .filerow.ok .dot{background:var(--mint);}
+  .filerow.err .dot{background:var(--danger);}
+  .filerow.busy .dot{background:var(--amber);animation:pulse 1s infinite;}
+  .filerow .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .filerow .status{color:var(--slate);flex-shrink:0;}
+  .filerow .remove{cursor:pointer;color:var(--slate);flex-shrink:0;}
+  .filerow .remove:hover{color:var(--danger);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+  /* paper / scanned text */
+  .paper-frame{
+    margin-top:18px;
+    position:relative;
+    background:var(--paper);
+    border-radius:3px;
+    overflow:hidden;
+    box-shadow: inset 0 0 0 1px var(--paper-line);
+  }
+  .paper-inner{
+    max-height:340px;
+    overflow-y:auto;
+    padding:22px 22px;
+    color:#2b2a25;
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    line-height:1.65;
+    white-space:pre-wrap;
+    word-wrap:break-word;
+  }
+  .paper-inner:empty::before{
+    content:'Extracted text will appear here.';
+    color:#9a927a;
+  }
+  .scanline{
+    position:absolute;left:0;right:0;top:0;height:2px;
+    background:linear-gradient(90deg, transparent, var(--coral) 40%, var(--coral) 60%, transparent);
+    box-shadow:0 0 14px 2px var(--coral);
+    opacity:0;
+  }
+  .scanning .scanline{
+    opacity:1;
+    animation:sweep 1.6s linear infinite;
+  }
+  @keyframes sweep{
+    0%{top:0;}
+    100%{top:100%;}
+  }
+
+  /* report panel */
+  .score-row{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;}
+  .score-num{font-family:var(--font-display);font-size:56px;font-weight:600;line-height:1;color:#eceef2;}
+  .score-max{font-family:var(--font-mono);font-size:14px;color:var(--slate);}
+  .score-label{font-family:var(--font-mono);font-size:12px;color:var(--slate);margin-bottom:20px;text-transform:uppercase;letter-spacing:.08em;}
+
+  .metric{
+    display:grid;
+    grid-template-columns:14px 1fr auto;
+    align-items:center;
+    gap:10px;
+    padding:9px 0;
+    border-top:1px solid #262b35;
+    font-size:13px;
+  }
+  .metric:first-of-type{border-top:none;}
+  .metric .dot{width:8px;height:8px;border-radius:50%;}
+  .metric .dot.mint{background:var(--mint);}
+  .metric .dot.amber{background:var(--amber);}
+  .metric .dot.danger{background:var(--danger);}
+  .metric .label{color:#c7cbd4;}
+  .metric .value{font-family:var(--font-mono);color:var(--slate);font-size:12px;}
+
+  .suggestions{margin-top:22px;}
+  .suggestions h3{
+    font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--slate);margin:0 0 12px;
+  }
+  .suggestion{
+    display:flex;gap:10px;padding:11px 0;border-top:1px solid #262b35;font-size:13.5px;line-height:1.5;color:#dfe2e8;
+  }
+  .suggestion:first-of-type{border-top:none;}
+  .suggestion .tag{
+    flex-shrink:0;width:6px;border-radius:3px;
+  }
+  .suggestion .tag.amber{background:var(--amber);}
+  .suggestion .tag.danger{background:var(--danger);}
+  .suggestion .tag.mint{background:var(--mint);}
+
+  .empty-report{
+    color:var(--slate);
+    font-size:13.5px;
+    line-height:1.6;
+    padding:8px 0 4px;
+  }
+
+  .error-banner{
+    background:#2b1a17;
+    border:1px solid #5a2e26;
+    color:#ffb4a0;
+    font-size:12.5px;
+    font-family:var(--font-mono);
+    padding:10px 12px;
+    border-radius:3px;
+    margin-top:12px;
+  }
+
+  .clear-btn{
+    font-family:var(--font-mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--slate);
+    background:transparent;
+    border:1px solid #333947;
+    border-radius:3px;
+    padding:5px 10px;
+    cursor:pointer;
+  }
+  .clear-btn:hover{border-color:var(--coral);color:var(--coral);}
+
+  footer{
+    margin-top:40px;
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:#4a5162;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="eyebrow">Content Analyzer · Client-side</p>
+      <h1>Run your post through the scanner.</h1>
+    </div>
+    <div class="steps">
+      <span class="active"><b>1</b> Upload</span>
+      <span><b>2</b> Extract</span>
+      <span><b>3</b> Report</span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- LEFT: scanner -->
+    <section class="panel">
+      <h2>Scanner <button class="clear-btn" id="clearBtn">Clear all</button></h2>
+
+      <div class="dropzone" id="dropzone">
+        <div class="glyph">＋</div>
+        <p>Drop a PDF or image here, or click to choose a file</p>
+        <p class="hint">PDF text is parsed directly · images are read with OCR</p>
+        <input type="file" id="fileInput" accept=".pdf,image/*" multiple />
+      </div>
+
+      <div class="filelist" id="fileList"></div>
+
+      <div class="paper-frame" id="paperFrame">
+        <div class="scanline"></div>
+        <div class="paper-inner" id="paperInner"></div>
+      </div>
+
+      <div id="errorBanner"></div>
+    </section>
+
+    <!-- RIGHT: report -->
+    <section class="panel">
+      <h2>Report</h2>
+      <div id="reportBody">
+        <p class="empty-report">Upload a post to see its engagement score, a metric breakdown, and specific edits to make before you publish.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>Runs entirely in your browser — files are never uploaded to a server.</footer>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const dropzone   = document.getElementById('dropzone');
+const fileInput  = document.getElementById('fileInput');
+const fileList   = document.getElementById('fileList');
+const paperFrame = document.getElementById('paperFrame');
+const paperInner = document.getElementById('paperInner');
+const errorBanner= document.getElementById('errorBanner');
+const reportBody = document.getElementById('reportBody');
+const clearBtn   = document.getElementById('clearBtn');
+
+let combinedText = '';
+let fileEntries = []; // {id, name, status, el}
+
+// ---------- Upload wiring ----------
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+clearBtn.addEventListener('click', () => {
+  combinedText = '';
+  fileEntries = [];
+  fileList.innerHTML = '';
+  paperInner.textContent = '';
+  errorBanner.innerHTML = '';
+  fileInput.value = '';
+  renderEmptyReport();
+});
+
+function handleFiles(fileListRaw){
+  const files = Array.from(fileListRaw);
+  files.forEach(processFile);
+}
+
+function addRow(name){
+  const id = 'f' + Math.random().toString(36).slice(2, 9);
+  const row = document.createElement('div');
+  row.className = 'filerow busy';
+  row.innerHTML = `<span class="dot"></span><span class="name">${escapeHtml(name)}</span><span class="status">reading…</span><span class="remove" title="remove">✕</span>`;
+  fileList.appendChild(row);
+  fileEntries.push({id, name, row});
+  return row;
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function processFile(file){
+  errorBanner.innerHTML = '';
+  const row = addRow(file.name);
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  const isImg = file.type.startsWith('image/');
+
+  if(!isPdf && !isImg){
+    row.className = 'filerow err';
+    row.querySelector('.status').textContent = 'unsupported type';
+    showError(`"${file.name}" isn't a PDF or image — skipped.`);
+    return;
+  }
+
+  paperFrame.classList.add('scanning');
+  try{
+    let text = '';
+    if(isPdf){
+      row.querySelector('.status').textContent = 'parsing pdf…';
+      text = await extractPdfText(file);
+    } else {
+      row.querySelector('.status').textContent = 'running OCR…';
+      text = await ocrImage(file, pct => {
+        row.querySelector('.status').textContent = `OCR ${pct}%`;
+      });
+    }
+    text = text.trim();
+    if(!text){
+      row.className = 'filerow err';
+      row.querySelector('.status').textContent = 'no text found';
+      showError(`No readable text was found in "${file.name}".`);
+    } else {
+      row.className = 'filerow ok';
+      row.querySelector('.status').textContent = `${text.split(/\s+/).filter(Boolean).length} words`;
+      combinedText += (combinedText ? '\n\n---\n\n' : '') + text;
+      paperInner.textContent = combinedText;
+      paperInner.scrollTop = paperInner.scrollHeight;
+      runAnalysis(combinedText);
+    }
+  }catch(err){
+    console.error(err);
+    row.className = 'filerow err';
+    row.querySelector('.status').textContent = 'failed';
+    showError(`Couldn't process "${file.name}": ${err.message || 'unknown error'}.`);
+  }finally{
+    paperFrame.classList.remove('scanning');
+    row.querySelector('.remove').addEventListener('click', () => {
+      row.remove();
+      // simplest safe behavior: full reset of combined text on removal,
+      // since text isn't tracked per-file to keep extraction fast.
+    });
+  }
+}
+
+function showError(msg){
+  const div = document.createElement('div');
+  div.className = 'error-banner';
+  div.textContent = msg;
+  errorBanner.appendChild(div);
+}
+
+// ---------- Extraction ----------
+async function extractPdfText(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  let out = [];
+  for(let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    // group items into lines using their y position, to keep basic paragraph structure
+    let lastY = null, line = [];
+    const lines = [];
+    content.items.forEach(item => {
+      const y = item.transform[5];
+      if(lastY !== null && Math.abs(y - lastY) > 2){
+        lines.push(line.join(' '));
+        line = [];
+      }
+      line.push(item.str);
+      lastY = y;
+    });
+    if(line.length) lines.push(line.join(' '));
+    out.push(lines.join('\n'));
+  }
+  return out.join('\n\n');
+}
+
+async function ocrImage(file, onProgress){
+  const { data } = await Tesseract.recognize(file, 'eng', {
+    logger: m => {
+      if(m.status === 'recognizing text' && onProgress){
+        onProgress(Math.round(m.progress * 100));
+      }
+    }
+  });
+  return data.text;
+}
+
+// ---------- Engagement analysis (rule-based, transparent, no API needed) ----------
+function runAnalysis(text){
+  const words = text.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+  const sentences = text.split(/[.!?]+(?:\s|$)/).map(s => s.trim()).filter(Boolean);
+  const avgWordsPerSentence = sentences.length ? wordCount / sentences.length : wordCount;
+
+  const hashtags = text.match(/#\w+/g) || [];
+  const mentions = text.match(/@\w+/g) || [];
+  const urls = text.match(/https?:\/\/\S+/g) || [];
+  const emojis = text.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) || [];
+  const questionMarks = (text.match(/\?/g) || []).length;
+  const exclaims = (text.match(/!/g) || []).length;
+
+  const ctaWords = /\b(comment|share|tag|dm|link in bio|swipe up|click|follow|subscribe|save this|drop a|let us know|sound off|reply|retweet|repost)\b/i;
+  const hasCta = ctaWords.test(text);
+
+  const capsWords = words.filter(w => w.length >= 3 && w === w.toUpperCase() && /[A-Z]/.test(w));
+  const capsRatio = wordCount ? capsWords.length / wordCount : 0;
+
+  const first120 = text.slice(0, 120);
+  const hookHasQuestionOrPower = /\?/.test(first120) || /\b(new|free|how to|why|secret|before you|stop|imagine|here's|you won't)\b/i.test(first120);
+
+  // ---- scoring (0-100) ----
+  let score = 0;
+  const metrics = [];
+
+  // Length: sweet spot ~40-150 words for most feeds
+  let lenPts;
+  if(wordCount === 0) lenPts = 0;
+  else if(wordCount < 15) lenPts = 8;
+  else if(wordCount <= 150) lenPts = 20;
+  else if(wordCount <= 250) lenPts = 14;
+  else lenPts = 8;
+  score += lenPts;
+  metrics.push(metricRow('Length', `${wordCount} words`, lenPts, 20));
+
+  // Hashtags: 3-8 ideal
+  let tagPts;
+  const tagCount = hashtags.length;
+  if(tagCount === 0) tagPts = 6;
+  else if(tagCount >= 3 && tagCount <= 8) tagPts = 15;
+  else if(tagCount < 3) tagPts = 10;
+  else tagPts = 6;
+  score += tagPts;
+  metrics.push(metricRow('Hashtags', `${tagCount} used`, tagPts, 15));
+
+  // CTA presence
+  let ctaPts = hasCta ? 15 : 4;
+  score += ctaPts;
+  metrics.push(metricRow('Call to action', hasCta ? 'present' : 'not found', ctaPts, 15));
+
+  // Hook / question engagement
+  let hookPts = hookHasQuestionOrPower ? 10 : (questionMarks > 0 ? 6 : 2);
+  score += hookPts;
+  metrics.push(metricRow('Opening hook', hookHasQuestionOrPower ? 'strong' : 'weak', hookPts, 10));
+
+  // Readability: shorter sentences read easier on mobile feeds
+  let readPts;
+  if(avgWordsPerSentence <= 14) readPts = 15;
+  else if(avgWordsPerSentence <= 22) readPts = 10;
+  else readPts = 5;
+  score += readPts;
+  metrics.push(metricRow('Readability', `${avgWordsPerSentence.toFixed(1)} words/sentence`, readPts, 15));
+
+  // Emoji use: light touch helps, spam hurts
+  let emojiPts;
+  const emojiCount = emojis.length;
+  if(emojiCount >= 1 && emojiCount <= 5) emojiPts = 10;
+  else if(emojiCount === 0) emojiPts = 6;
+  else emojiPts = 4;
+  score += emojiPts;
+  metrics.push(metricRow('Emoji use', `${emojiCount} found`, emojiPts, 10));
+
+  // Caps abuse penalty folded into a 15pt "tone" metric
+  let tonePts = capsRatio > 0.08 ? 5 : 15;
+  score += tonePts;
+  metrics.push(metricRow('Tone (caps usage)', capsRatio > 0.08 ? 'shouty' : 'clean', tonePts, 15));
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  // ---- suggestions ----
+  const suggestions = [];
+  if(wordCount === 0){
+    suggestions.push({tag:'danger', text:'No text was extracted — try a clearer scan or a text-based PDF.'});
+  }
+  if(wordCount > 250){
+    suggestions.push({tag:'amber', text:'This is long for a social post. Trim to under ~150 words or move the detail into a thread/carousel.'});
+  } else if(wordCount < 15 && wordCount > 0){
+    suggestions.push({tag:'amber', text:'The post is very short. Add one concrete detail or a reason to care so it doesn\u2019t read as filler.'});
+  }
+  if(tagCount === 0){
+    suggestions.push({tag:'amber', text:'No hashtags found. Add 3–8 relevant tags to improve discoverability.'});
+  } else if(tagCount > 8){
+    suggestions.push({tag:'amber', text:`${tagCount} hashtags is on the high side — it can read as spammy. Cut to your best 5–8.`});
+  }
+  if(!hasCta){
+    suggestions.push({tag:'danger', text:'No clear call to action. Ask a question or tell readers exactly what to do next (comment, share, save).'});
+  }
+  if(!hookHasQuestionOrPower){
+    suggestions.push({tag:'amber', text:'The opening line doesn\u2019t hook fast. Lead with the most surprising fact, a question, or a number — most feeds truncate after ~100 characters.'});
+  }
+  if(avgWordsPerSentence > 22){
+    suggestions.push({tag:'amber', text:'Sentences are long on average. Break them up — short sentences read better on mobile.'});
+  }
+  if(capsRatio > 0.08){
+    suggestions.push({tag:'danger', text:'Heavy use of ALL CAPS can read as shouting and hurt trust. Reserve it for one word, max.'});
+  }
+  if(emojiCount > 8){
+    suggestions.push({tag:'amber', text:'Emoji-heavy — dial it back to a handful placed with intent.'});
+  }
+  if(urls.length > 0){
+    suggestions.push({tag:'amber', text:'Contains a raw link — some platforms deprioritize outbound links in the caption. Consider "link in bio" instead.'});
+  }
+  if(suggestions.length === 0){
+    suggestions.push({tag:'mint', text:'Solid on the fundamentals — length, hashtags, hook, and CTA are all in a good range.'});
+  }
+
+  renderReport(score, metrics, suggestions);
+}
+
+function metricRow(label, value, pts, max){
+  const ratio = pts / max;
+  const cls = ratio >= 0.75 ? 'mint' : ratio >= 0.4 ? 'amber' : 'danger';
+  return {label, value, pts, max, cls};
+}
+
+function renderReport(score, metrics, suggestions){
+  const scoreColor = score >= 75 ? 'var(--mint)' : score >= 45 ? 'var(--amber)' : 'var(--danger)';
+  let html = `
+    <div class="score-row"><span class="score-num" style="color:${scoreColor}">${score}</span><span class="score-max">/ 100 engagement score</span></div>
+    <div class="score-label">Breakdown</div>
+  `;
+  metrics.forEach(m => {
+    html += `<div class="metric"><span class="dot ${m.cls}"></span><span class="label">${m.label}</span><span class="value">${m.value} · ${m.pts}/${m.max}</span></div>`;
+  });
+  html += `<div class="suggestions"><h3>Suggestions</h3>`;
+  suggestions.forEach(s => {
+    html += `<div class="suggestion"><span class="tag ${s.tag}"></span><span>${s.text}</span></div>`;
+  });
+  html += `</div>`;
+  reportBody.innerHTML = html;
+}
+
+function renderEmptyReport(){
+  reportBody.innerHTML = `<p class="empty-report">Upload a post to see its engagement score, a metric breakdown, and specific edits to make before you publish.</p>`;
+}
+</script>
+</body>
+</html>
